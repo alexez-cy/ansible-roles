@@ -1,0 +1,6 @@
+---
+es_data_path: "/var/lib/elasticsearch"
+elastic_major_version: 9
+es_version: 9.4.1
+ror_version: 1.69.1
+ror_email: elk@ltd

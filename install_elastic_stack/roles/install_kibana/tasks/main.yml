@@ -1,0 +1,82 @@
+---
+
+- name: Stop Kibana if running
+  systemd:
+    name: kibana
+    state: stopped
+  when:
+    - "'kibana.service' in ansible_facts.services"
+    - ansible_facts.services['kibana.service'].state == 'running'
+
+- name: Check if ReadonlyREST Kibana plugin is installed
+  stat:
+    path: /usr/share/kibana/plugins/readonlyrestkbn/ror-tools.js
+  register: ror_kbn_tools
+
+- name: Unpatch Kibana (if installed)
+  shell: >
+    /usr/share/kibana/node/glibc-217/bin/node
+    /usr/share/kibana/plugins/readonlyrestkbn/ror-tools.js
+    unpatch
+  when: ror_kbn_tools.stat.exists
+
+- name: Remove ReadonlyREST Kibana plugin (if installed)
+  shell: /usr/share/kibana/bin/kibana-plugin remove readonlyrestkbn || true
+  when: ror_kbn_tools.stat.exists
+
+- name: Install Kibana
+  apt:
+    name: kibana={{ es_version }}
+    state: present
+
+- name: Configure Kibana
+  template:
+    src: kibana.yml.j2
+    dest: /etc/kibana/kibana.yml
+
+- name: Copy Kibana certificate
+  ansible.builtin.copy:
+    content: "{{ cert }}"
+    dest: /etc/kibana/cert.crt
+    owner: root
+    group: kibana
+    mode: '0644'
+
+- name: Copy Kibana private key
+  ansible.builtin.copy:
+    content: "{{ key }}"
+    dest: /etc/kibana/key.key
+    owner: root
+    group: kibana
+    mode: '0640'
+
+- name: Download ReadonlyREST for Kibana
+  get_url:
+    url: "https://portal.readonlyrest.com/download/kbn\
+          ?email={{ ror_email }}\
+          &edition=kbn_universal\
+          &esVersion={{ es_version }}\
+          &pluginVersion={{ ror_version }}"
+    dest: "/root/readonlyrest_kbn_universal-{{ ror_version }}_es{{ es_version }}.zip"
+    mode: "0644"
+
+
+- name: Install ReadonlyREST for Kibana
+  shell: >
+     /usr/share/kibana/bin/kibana-plugin install
+     file:///root/readonlyrest_kbn_universal-{{ ror_version }}_es{{ es_version }}.zip
+
+- name: Patch Kibana
+  shell: >
+    /usr/share/kibana/node/glibc-217/bin/node
+    /usr/share/kibana/plugins/readonlyrestkbn/ror-tools.js
+    patch --I_UNDERSTAND_AND_ACCEPT_KBN_PATCHING=yes
+
+- name: Allow Kibana to bind to port 443
+  shell: setcap 'cap_net_bind_service=+ep' '/usr/share/kibana/node/default/bin/node'
+  changed_when: false
+
+- name: Start Kibana after plugin install
+  systemd:
+    name: kibana
+    state: started

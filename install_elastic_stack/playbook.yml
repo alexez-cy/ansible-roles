@@ -1,0 +1,36 @@
+---
+- hosts: "{{ ansible_limit | default('__no_hosts_selected__') }}"
+  become: true
+  tasks:
+
+    - name: Read secret from Vault
+      community.hashi_vault.vault_kv2_get:
+        url:
+        engine_mount_point:
+        path:
+        auth_method: approle
+        mount_point:
+        role_id:
+      register: elk_vault_response
+      delegate_to: localhost
+      become: false
+      run_once: true
+      no_log: true
+
+
+    - name: Prepare credentials
+      ansible.builtin.set_fact:
+        cert: "{{ elk_vault_response.secret.cert }}"
+        key: "{{ elk_vault_response.secret.key }}"
+        admin_password_sha256: "{{ ('admin:' ~ elk_vault_response.secret.admin) | hash('sha256') }}"
+        kibana_password_sha256: "{{ ('kibana:' ~ elk_vault_response.secret.kibana) | hash('sha256') }}"
+      no_log: true
+
+    - name: Run Elasticsearch role
+      ansible.builtin.include_role:
+        name: install_elasticsearch
+
+    - name: Run Kibana role
+      ansible.builtin.include_role:
+        name: install_kibana
+        when: "'data' not in inventory_hostname | lower"

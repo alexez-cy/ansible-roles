@@ -1,0 +1,55 @@
+cluster.name: {{ ansible_limit }}
+node.name: {{ inventory_hostname }}
+
+network.host: 0.0.0.0
+http.port: 9260
+
+path.data: {{ es_data_path }}
+path.logs: /var/log/elasticsearch
+
+{% set roles = [] %}
+{% set hostname = inventory_hostname | lower %}
+
+{% if 'master' in hostname %}
+{%   set _ = roles.append('master') %}
+{% endif %}
+
+{% if 'data' in hostname %}
+{%   set _ = roles.append('data') %}
+{% endif %}
+
+{% if 'ingest' in hostname %}
+{%   set _ = roles.append('ingest') %}
+{% endif %}
+
+node.roles: {{ roles if roles else ['master', 'data'] }}
+
+discovery.seed_hosts:
+{% for host in ansible_play_hosts %}
+{%   set h = host | lower %}
+{%   if 'master' in h or ('data' not in h and 'ingest' not in h) %}
+  - "{{ hostvars[host]['ansible_host'] }}"
+{%   endif %}
+{% endfor %}
+
+cluster.initial_master_nodes:
+{% for host in ansible_play_hosts %}
+{%   set h = host | lower %}
+{%   if 'master' in h or ('data' not in h and 'ingest' not in h) %}
+  - "{{ host }}"
+{%   endif %}
+{% endfor %}
+
+
+http.type: ssl_netty4
+xpack.security.enabled: false
+xpack.security.transport.ssl.enabled: false
+xpack.security.http.ssl.enabled: false
+
+readonlyrest:
+  ssl:
+    enable: true
+    keystore_file: "keystore.p12"
+    keystore_pass: readonlyrest
+    key_pass: readonlyrest
+  force_load_from_file: true

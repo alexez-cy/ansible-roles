@@ -1,0 +1,149 @@
+---
+- name: Gather service facts
+  service_facts:
+
+- name: Stop Elasticsearch if running
+  systemd:
+    name: elasticsearch
+    state: stopped
+  when:
+    - "'elasticsearch.service' in ansible_facts.services"
+    - ansible_facts.services['elasticsearch.service'].state == 'running'
+
+- name: Install dependencies
+  apt:
+    name:
+      - openjdk-17-jdk
+      - curl
+      - apt-transport-https
+      - nodejs
+    update_cache: true
+
+- name: Set vm.max_map_count
+  sysctl:
+    name: vm.max_map_count
+    value: 262144
+    state: present
+    reload: true
+
+- name: Add APT key
+  apt_key:
+    url: https://artifacts.elastic.co/GPG-KEY-elasticsearch
+    keyring: /etc/apt/trusted.gpg.d/elastic-repo.gpg
+    state: present
+
+- name: Install repository
+  apt_repository:
+    repo: deb https://artifacts.elastic.co/packages/{{ elastic_major_version }}.x/apt stable main
+    filename: elastic
+    state: present
+
+- name: Check if ReadonlyREST tools jar exists
+  stat:
+    path: /usr/share/elasticsearch/plugins/readonlyrest/ror-tools.jar
+  register: ror_tools_jar
+
+- name: Unpatch ReadonlyREST (if installed)
+  shell: >
+    /usr/share/elasticsearch/jdk/bin/java -jar
+    /usr/share/elasticsearch/plugins/readonlyrest/ror-tools.jar unpatch
+  when: ror_tools_jar.stat.exists
+
+- name: Remove ReadonlyREST (if installed)
+  shell: >
+    export ES_PATH_CONF=/etc/elasticsearch/ ;
+    /usr/share/elasticsearch/bin/elasticsearch-plugin remove readonlyrest || true
+  when: ror_tools_jar.stat.exists
+
+- name: Install Elasticsearch
+  apt:
+    name: elasticsearch={{ es_version }}
+    state: present
+
+- name: Create data directory
+  file:
+    path: "{{ es_data_path }}"
+    state: directory
+    owner: elasticsearch
+    group: elasticsearch
+    mode: '0755'
+
+- name: Configure Elasticsearch
+  template:
+    src: elasticsearch.yml.j2
+    dest: /etc/elasticsearch/elasticsearch.yml
+    owner: root
+    group: elasticsearch
+    mode: '0640'
+
+- name: Download ReadonlyREST for Elasticsearch
+  get_url:
+    url: "https://portal.readonlyrest.com/download/es\
+          ?email={{ ror_email }}\
+          &edition=es\
+          &esVersion={{ es_version }}\
+          &pluginVersion={{ ror_version }}"
+    dest: "/root/readonlyrest-{{ ror_version }}_es{{ es_version }}.zip"
+    mode: "0644"
+
+- name: Install ReadonlyREST for Elasticsearch
+  shell: >
+    export ES_PATH_CONF=/etc/elasticsearch/ ; echo y |
+    /usr/share/elasticsearch/bin/elasticsearch-plugin
+    install file:///root/readonlyrest-{{ ror_version }}_es{{ es_version }}.zip
+
+- name: Patch Elasticsearch
+  shell: >
+    /usr/share/elasticsearch/jdk/bin/java -jar
+    /usr/share/elasticsearch/plugins/readonlyrest/ror-tools.jar
+    patch --I_UNDERSTAND_AND_ACCEPT_ES_PATCHING=yes
+
+- name: Copy Elasticsearch certificate
+  ansible.builtin.copy:
+    content: "{{ cert }}"
+    dest: /etc/elasticsearch/certs/cert.crt
+    owner: elasticsearch
+    group: elasticsearch
+    mode: '0644'
+  no_log: true
+
+- name: Copy Elasticsearch private key
+  ansible.builtin.copy:
+    content: "{{ key }}"
+    dest: /etc/elasticsearch/certs/key.key
+    owner: elasticsearch
+    group: elasticsearch
+    mode: '0640'
+  no_log: true
+
+- name: Create PKCS#12 keystore
+  command: >
+    openssl pkcs12 -export
+    -inkey /etc/elasticsearch/certs/key.key
+    -in /etc/elasticsearch/certs/cert.crt
+    -out /etc/elasticsearch/keystore.p12
+    -name readonlyrest
+    -passout pass:readonlyrest
+
+- name: Set ownership of PKCS#12 keystore
+  file:
+    path: /etc/elasticsearch/keystore.p12
+    owner: elasticsearch
+    group: elasticsearch
+    mode: "0640"
+
+- name: Configure ReadonlyREST
+  template:
+    src: readonlyrest.yml.j2
+    dest: /etc/elasticsearch/readonlyrest.yml
+
+- name: Start Elasticsearch after plugin install
+  systemd:
+    name: elasticsearch
+    state: started
+
+- name: Remove cluster.initial_master_nodes after bootstrap
+  replace:
+    path: "/etc/elasticsearch/elasticsearch.yml"
+    regexp: '^(cluster\.initial_master_nodes:.*)$'
+    replace: '#\1'

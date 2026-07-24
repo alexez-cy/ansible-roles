@@ -1,0 +1,42 @@
+server.name: {{ inventory_hostname }}
+server.host: "0.0.0.0"
+server.port: 443
+server.publicBaseUrl: https://{{ ansible_limit }}.{{ domain }}
+server.ssl.enabled: true
+server.ssl.certificate: /etc/kibana/cert.crt
+server.ssl.key: /etc/kibana/key.key
+
+elasticsearch.hosts:
+{% for host in ansible_play_hosts %}
+  - "https://{{ hostvars[host]['ansible_host'] }}:9260"
+{% endfor %}
+elasticsearch.username: "kibana"
+elasticsearch.password: "{{ elk_vault_response.secret.kibana }}"
+elasticsearch.ssl.verificationMode: none
+
+xpack.reporting.enabled: false
+monitoring.kibana.collection.enabled: false
+
+logging:
+  appenders:
+    file:
+      type: file
+      fileName: /var/log/kibana/kibana.log
+      layout:
+        type: json
+  root:
+    appenders:
+      - default
+      - file
+
+readonlyrest_kbn.whitelistedPaths: [".*/api/status$"]
+readonlyrest_kbn.sessions_refresh_after: 9000
+readonlyrest_kbn.sessions_probe_interval_seconds: 300
+readonlyrest_kbn.sessions_index_name: ".new_sessions"
+readonlyrest_kbn.session_timeout_minutes: 9000 # defaults to 4320 (3 days)
+readonlyrest_kbn.clearSessionOnEvents: ["never"]
+readonlyrest_kbn.store_sessions_in_index: true
+
+
+
+

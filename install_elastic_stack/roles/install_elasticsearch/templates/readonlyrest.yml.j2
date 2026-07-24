@@ -1,0 +1,14 @@
+readonlyrest:
+     enable: true
+     force_load_from_file: true
+     audit_collector: False
+     audit:
+      enabled: true
+
+     access_control_rules:
+      - name: "Kibana"
+        auth_key_sha256: {{ kibana_password_sha256 }}
+
+      - name: "Admin"
+        auth_key_sha256: {{ admin_password_sha256 }}
+
