@@ -38,26 +38,6 @@ The role focuses on validating infrastructure components commonly required in pr
 
 No additional Ansible collections are required beyond the built-in modules.
 
-## Variables
-
-Default values:
-
-```yaml
-infra_interfaces_to_check:
-  - int1
-  - int2
-  - ext1
-  - ext2
-  - aggi
-  - agge
-
-infra_postinst_int_bond: aggi
-infra_postinst_ext_bond: agge
-```
-
-Adjust these variables to match your environment.
-
-
 ## Example Output
 
 ```
