@@ -1,0 +1,44 @@
+- name: Remove 01-netcfg.yaml if it exists
+  ansible.builtin.file:
+    path: /etc/netplan/01-netcfg.yaml
+    state: absent
+
+- name: Check if all interfaces are up
+  ansible.builtin.shell: ip link show {{ item }} | grep "state UP"
+  register: interface_status
+  with_items: "{{ infra_interfaces_to_check }}"
+  changed_when: false
+  failed_when: false
+
+- name: Show interfaces that are not UP
+  ansible.builtin.debug:
+    msg: "Interface {{ item.item }} is DOWN or missing!"
+  with_items: "{{ interface_status.results }}"
+  when: item.stdout == ""
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Check if int_bond interface exists in /proc/net/bonding/
+  ansible.builtin.stat:
+    path: "/proc/net/bonding/{{ infra_postinst_int_bond }}"
+  register: int_bond_interface_stat
+
+- name: Check if ext_bond interface exists in /proc/net/bonding/
+  ansible.builtin.stat:
+    path: "/proc/net/bonding/{{ infra_postinst_ext_bond }}"
+  register: ext_bond_interface_stat
+
+- name: Fail if bond interface is not found
+  ansible.builtin.fail:
+    msg: "Bond interface {{ infra_postinst_int_bond }} not found in /proc/net/bonding/"
+  when: not int_bond_interface_stat.stat.exists
+
+- name: Show agge if not exist
+  ansible.builtin.debug:
+    msg: "Interface {{ infra_postinst_ext_bond }} is missing!"
+  when: not ext_bond_interface_stat.stat.exists
+
+- name: Get speed of bond int interface using ethtool
+  ansible.builtin.command: ethtool {{ infra_postinst_int_bond }}
+  register: bond_speed
+  changed_when: false

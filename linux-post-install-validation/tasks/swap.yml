@@ -1,0 +1,9 @@
+- name: Get swap types
+  ansible.builtin.command: swapon --show=TYPE --noheadings
+  register: swap_status
+  changed_when: false
+
+- name: Fail if any swap is active
+  ansible.builtin.fail:
+    msg: "SWAP is mounted"
+  when: swap_status.stdout_lines | length > 0

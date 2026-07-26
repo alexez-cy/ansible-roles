@@ -1,0 +1,13 @@
+- name: Check lsblk for encrypted devices
+  ansible.builtin.command: "lsblk"
+  register: lsblk_output
+  changed_when: false
+
+- name: Parse lsblk output to find encrypted devices
+  ansible.builtin.set_fact:
+    encrypted_devices: "{{ lsblk_output.stdout_lines | select('search', 'crypt') | list }}"
+
+- name: Fail if no encrypted devices found
+  ansible.builtin.fail:
+    msg: "No encrypted devices found"
+  when: encrypted_devices | length == 0

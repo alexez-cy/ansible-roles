@@ -1,0 +1,21 @@
+- name: Check disk
+  ansible.builtin.import_tasks:
+    file: disk.yml
+
+- name: Check network
+  ansible.builtin.import_tasks:
+    file: network.yml
+
+- name: Check perforamnce mode
+  ansible.builtin.import_tasks:
+    file: performance.yml
+
+- name: Check if swap exitsts
+  ansible.builtin.import_tasks:
+    file: swap.yml
+
+- name: Show encrypted devices and  Display bond interface speed
+  ansible.builtin.debug:
+    msg:
+      - "Encrypted devices found: {{ encrypted_devices }}"
+      - "Speed of bond interface {{ infra_postinst_int_bond }} : {{ bond_speed.stdout | regex_search('Speed: (\\d+)', '\\1') }} Mbps"

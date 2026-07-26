@@ -1,0 +1,9 @@
+infra_interfaces_to_check:
+  - "int1"
+  - "int2"
+  - "ext1"
+  - "ext2"
+  - "aggi"
+  - "agge"
+infra_postinst_int_bond: "aggi"
+infra_postinst_ext_bond: "agge"
