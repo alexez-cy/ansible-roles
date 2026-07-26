@@ -1,0 +1,8 @@
+encrypted_luks_tuning_params:
+  - "--perf-submit_from_crypt_cpus"
+  - "--perf-same_cpu_crypt"
+  - "--integrity-no-journal"
+  - "--perf-no_read_workqueue"
+  - "--perf-no_write_workqueue"
+  - "--persistent"
+  

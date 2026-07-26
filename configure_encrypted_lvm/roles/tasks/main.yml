@@ -1,0 +1,75 @@
+---
+- name: Ensure required packages are installed
+  package:
+    name:
+      - cryptsetup
+      - lvm2
+    state: present
+
+- name: Ensure LUKS device exists
+  community.crypto.luks_device:
+    name: "{{ luks_name }}"
+    device: "{{ luks_device }}"
+    passphrase: "{{ sec_encryption_password }}"
+    type: luks2
+    state: present
+
+- name: Open LUKS device
+  community.crypto.luks_device:
+    name: "{{ luks_name }}"
+    device: "{{ luks_device }}"
+    passphrase: "{{ sec_encryption_password }}"
+    state: opened
+
+- name: Create volume group if not exists
+  community.general.lvg:
+    vg: "vg_{{ luks_name }}"
+    pvs: "/dev/mapper/{{ luks_name }}"
+    pvresize: true
+
+- name: Create logical volume if not exists
+  community.general.lvol:
+    vg: "vg_{{ luks_name }}"
+    lv: "lv_{{ luks_name }}"
+    size: 100%FREE
+    state: present
+
+- name: Create filesystem if not exists
+  community.general.filesystem:
+    fstype: "{{ fstype }}"
+    dev: "/dev/vg_{{ luks_name }}/lv_{{ luks_name }}"
+    force: no
+
+- name: Ensure mount directory exists
+  ansible.builtin.file:
+    path: "{{ mount_point }}"
+    state: directory
+
+- name: Get LUKS UUID
+  ansible.builtin.command:
+    cmd: cryptsetup luksUUID {{ luks_device }}
+  register: luks_uuid
+  changed_when: false
+
+- name: Ensure entry in /etc/crypttab
+  ansible.builtin.lineinfile:
+    path: /etc/crypttab
+    line: "{{ luks_name }} UUID={{ luks_uuid.stdout }} none luks"
+    state: present
+
+- name: Mount the Logical Volume
+  ansible.posix.mount:
+    path: "{{ mount_point }}"
+    src: "/dev/vg_{{ luks_name }}/lv_{{ luks_name }}"
+    fstype: "{{ fstype }}"
+    opts: defaults,noatime,nodiratime,discard
+    dump: "0"
+    passno: "0"
+    state: mounted
+
+- name: Apply LUKS performance tuning parameters
+  ansible.builtin.shell:
+    cmd: "echo '{{ sec_encryption_password }}' | cryptsetup --batch-mode  refresh {{ luks_name }} {{ encrypted_luks_tuning_params | join(' ') }}"
+  register: cryptsetup_tune_result
+  changed_when: cryptsetup_tune_result.rc == 0
+  failed_when: cryptsetup_tune_result.rc != 0
